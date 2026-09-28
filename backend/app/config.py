@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     resolve_after_normal_windows: int = 3
     incident_gap_seconds: float = 120.0
 
+    # ---- payment-scoped detector -------------------------------------------
+    # Watches only "[payments] POST /api/v1/checkout <status> ..." completion lines
+    # in the same rolling window; a request failed iff its HTTP status is 5xx.
+    # Fixed thresholds (no learned baseline): normal checkout failure rate is ~0.
+    payment_source: str = "payments"
+    payment_route: str = "/api/v1/checkout"
+    payment_failure_threshold: float = 0.20   # open when >= 20% of checkout requests fail
+    payment_healthy_rate: float = 0.05        # a window counts as healthy below 5%
+    payment_min_requests: int = 20            # fewer requests in the window => no verdict
+    payment_resolve_after_windows: int = 3    # consecutive healthy windows WITH traffic to resolve
+    payment_evidence_lines: int = 5           # supporting log lines attached to the alert
+
     # ---- ML -----------------------------------------------------------------
     artifacts_dir: Path = BACKEND_DIR / "artifacts"
     enable_ml: bool = True
@@ -71,6 +83,7 @@ class Settings(BaseSettings):
     # ---- built-in simulator / demo -----------------------------------------
     simulator_enabled: bool = False      # generate logs inside the backend (one-command demo)
     simulator_rate: float = 20.0         # lines/sec, match the training data
+    simulator_payment_rate: float = 0.5  # of which: [payments] checkout completions/sec (fixed cadence)
     inject_control_file: Path = PROJECT_DIR / "data" / "inject_request.json"
 
     # ---- API ----------------------------------------------------------------

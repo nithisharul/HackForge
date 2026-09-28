@@ -34,10 +34,12 @@ def main() -> None:
     p.add_argument("--control-file", type=Path, default=ROOT / "data" / "inject_request.json")
     p.add_argument("--rotate-every", type=float, default=0, help="rotate the file every N seconds")
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--payment-rate", type=float, default=0.5,
+                   help="checkout requests/sec from [payments] (used by hidden_payment_failure)")
     a = p.parse_args()
 
     a.file.parent.mkdir(parents=True, exist_ok=True)
-    sim = LogSimulator(rate=a.rate, seed=a.seed)
+    sim = LogSimulator(rate=a.rate, seed=a.seed, payment_rate=a.payment_rate)
     now = time.time()
     for spec in a.inject:
         kind, _, rest = spec.partition("@")

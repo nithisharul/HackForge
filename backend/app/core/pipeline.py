@@ -66,7 +66,8 @@ class Pipeline:
         self.alerts = AlertManager(cfg.alert_cooldown_seconds, cfg.resolve_after_normal_windows)
         self.incidents = IncidentGrouper(cfg.incident_gap_seconds)
         self.simulator: LogSimulator | None = (
-            LogSimulator(rate=cfg.simulator_rate) if cfg.simulator_enabled else None)
+            LogSimulator(rate=cfg.simulator_rate, payment_rate=cfg.simulator_payment_rate)
+            if cfg.simulator_enabled else None)
 
         self.metrics_history: deque[dict] = deque(maxlen=int(3600 / cfg.tick_seconds))
         self.latest: Evaluation | None = None

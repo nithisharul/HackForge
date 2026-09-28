@@ -7,6 +7,12 @@ Used by:
 
 Normal traffic: ~`rate` lines/s (Poisson, with a gentle sine wobble), about
 3% ERROR and 7% WARN spread across realistic message templates.
+
+Optional checkout stream (`payment_rate` > 0): the payments service emits
+`POST /api/v1/checkout <status> <ms>ms request_id=<hex>` completion lines at a
+fixed cadence (not Poisson, not a random service pick), carved out of the total
+rate so overall volume is unchanged. It is normally all 2xx; the
+hidden_payment_failure scenario makes 3 of every 5 of them return HTTP 5xx.
 """
 from __future__ import annotations
 
@@ -53,7 +59,11 @@ SCENARIOS = {
     "volume_drop":  "Traffic drops to ~15% (a service going quiet)",
     "new_errors":   "Never-seen-before error messages at a moderate rate",
     "fatal_burst":  "Error rate ~75% with FATAL database errors",
+    "hidden_payment_failure": "Payments checkout requests fail with HTTP 5xx (~60%) while other "
+                              "services stay healthy; overall error rate moves only slightly",
 }
+PAYMENT_ROUTE = "/api/v1/checkout"
+PAYMENT_5XX = [500, 502, 503, 504]
 
 
 @dataclass
@@ -71,12 +81,14 @@ class Anomaly:
 
 class LogSimulator:
     def __init__(self, rate: float = 20.0, error_rate: float = 0.03, warn_rate: float = 0.07,
-                 seed: int | None = None):
+                 seed: int | None = None, payment_rate: float = 0.0, payment_seed: int = 7):
         self.rate = rate
         self.error_rate = error_rate
         self.warn_rate = warn_rate
         self.rng = random.Random(seed)
         self.anomalies: list[Anomaly] = []
+        self.payment_rate = min(max(payment_rate, 0.0), rate)
+        self.pay_rng = random.Random(payment_seed)   # checkout stream is reproducible on its own
 
     def inject(self, kind: str, start: float, duration: float) -> Anomaly:
         if kind not in SCENARIOS:
@@ -112,6 +124,8 @@ class LogSimulator:
         _rate, err, novel, kind = self._params(t)
         ts = datetime.fromtimestamp(t, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         svc = r.choice(SERVICES)
+        if self.payment_rate and svc == "payments":
+            svc = r.choice(SERVICES[:2] + SERVICES[3:])   # the checkout stream owns [payments]
         x = r.random()
         if x < err:
             if r.random() < novel:
@@ -138,10 +152,28 @@ class LogSimulator:
 
     def lines_for_interval(self, t0: float, t1: float) -> list[str]:
         """Live: lines for the wall-clock slice [t0, t1)."""
-        rate = self._params(t0)[0]
+        rate = self._params(t0)[0] - self.payment_rate
         n = _poisson(self.rng, rate * (t1 - t0))
-        times = sorted(self.rng.uniform(t0, t1) for _ in range(n))
-        return [self.line(t) for t in times]
+        out = [(t, self.line(t)) for t in (self.rng.uniform(t0, t1) for _ in range(n))]
+        if self.payment_rate:
+            # fixed cadence: request k happens at k / payment_rate seconds
+            k0, k1 = math.ceil(t0 * self.payment_rate), math.ceil(t1 * self.payment_rate)
+            out += [(k / self.payment_rate, self.payment_line(k / self.payment_rate, k))
+                    for k in range(k0, k1)]
+        out.sort(key=lambda x: x[0])
+        return [line for _, line in out]
+
+    def payment_line(self, t: float, k: int) -> str:
+        """One checkout request completion from the payments service."""
+        r = self.pay_rng
+        failing = any(a.kind == "hidden_payment_failure" and a.active(t) for a in self.anomalies)
+        ts = datetime.fromtimestamp(t, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        if failing and k % 5 < 3:
+            level, status, ms = "ERROR", r.choice(PAYMENT_5XX), r.randint(2500, 5000)
+        else:
+            level, status, ms = "INFO", 201, r.randint(40, 300)
+        return (f"{ts} {level} [payments] POST {PAYMENT_ROUTE} {status} {ms}ms "
+                f"request_id={r.getrandbits(64):016x}")
 
 
 def _poisson(rng: random.Random, lam: float) -> int:
