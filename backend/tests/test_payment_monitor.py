@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from app.config import Settings
 from app.core.parsers.generic import GenericParser
 from app.core.payment_monitor import PaymentMonitor
-from app.core.pipeline import Pipeline
+from app.core.pipeline import PAYMENT_TITLE, Pipeline
 from app.db.store import AlertStore
+from app.models.schemas import Severity
 from app.publishers.dispatcher import Dispatcher
 from app.publishers.websocket import ConnectionManager
 from app.sim.simulator import SCENARIOS, LogSimulator
@@ -62,6 +63,34 @@ def _feed(m, t, status):
 
 
 # ------------------------------------------------------------------ detection
+def test_hidden_payment_failure_detected_while_global_stays_normal(tmp_path):
+    assert "hidden_payment_failure" in SCENARIOS
+
+    async def run():
+        p = _pipeline(tmp_path)
+        sim = LogSimulator(rate=20, seed=3, payment_rate=0.5)
+        await _drive(p, sim, T0, 180)                                 # warm-up, normal traffic
+        assert p.detector.baseline.ready and not await p.store.list_alerts()
+        sim.inject("hidden_payment_failure", T0 + 180, 120)
+        ticks = await _drive(p, sim, T0 + 180, 120)
+        return p, ticks, await p.store.list_alerts(), await p.store.list_incidents()
+
+    p, ticks, alerts, incidents = asyncio.run(run())
+    assert len(alerts) == 1, "one alert for the whole ongoing failure (no per-tick repeats)"
+    a = alerts[0]
+    assert a["scope"] == "payments" and a["title"] == PAYMENT_TITLE and a["status"] == "OPEN"
+    assert a["root_cause"] == []                                       # evidence only, no claimed cause
+    assert 0 < len(a["sample_lines"]) <= 5
+    assert all(FAILED_CHECKOUT.search(s) for s in a["sample_lines"])  # actual failed checkout lines
+    # the global detector (z-score) stayed quiet and the global error rate barely moved
+    assert all(ev.severity == Severity.NONE for _, ev, _ in ticks)
+    assert max(ev.snapshot.error_rate for _, ev, _ in ticks) < 0.06
+    assert max(s["failure_rate"] for _, _, s in ticks) >= 0.5
+    inc = incidents[0]
+    assert inc["scope"] == "payments" and inc["status"] == "OPEN" and inc["details"]["evidence"]
+    assert p.incidents.current is None                                 # global grouper untouched
+
+
 def test_status_code_not_log_level_decides_failure():
     m = _monitor()
     for i in range(25):
@@ -102,3 +131,53 @@ def test_no_payment_traffic_does_not_count_as_recovery():
     actions = [m.evaluate(T0 + 30 + k * 5).action for k in range(1, 60)]   # 5 min of silence
     assert "RESOLVED" not in actions
     assert m.phase == "OPEN" and m.snapshot()["recovery_unverified"] and m.healthy_streak == 0
+
+
+def test_sustained_healthy_payment_traffic_resolves_incident(tmp_path):
+    async def run():
+        p = _pipeline(tmp_path)
+        other = lambda t: [_line(t + j / 20, "INFO", "search", f"GET /api/v1/search 200 {j}ms") for j in range(19)]
+        failing = lambda t: other(t) + [_checkout(t, 503 if int(t) % 5 < 3 else 201)]
+        healthy = lambda t: other(t) + [_checkout(t, 201)]
+        quiet = other                                   # healthy global traffic, no checkouts at all
+        await _drive(p, None, T0, 60, healthy)
+        await _drive(p, None, T0 + 60, 60, failing)
+        opened = await p.store.list_alerts()
+        silent = await _drive(p, None, T0 + 120, 180, quiet)
+        after_silence = await p.store.list_alerts()
+        recovering = await _drive(p, None, T0 + 300, 120, healthy)
+        return p, opened, silent, after_silence, recovering, await p.store.list_alerts(), \
+            await p.store.list_incidents()
+
+    p, opened, silent, after_silence, recovering, alerts, incidents = asyncio.run(run())
+    assert [a["status"] for a in opened] == ["OPEN"]
+    assert len(after_silence) == 1                      # silence neither resolved nor re-alerted
+    assert silent[-1][2]["recovery_unverified"] and silent[-1][2]["phase"] == "OPEN"
+    phases = [s["phase"] for _, _, s in recovering]
+    assert "RECOVERING" in phases and phases.index("RESOLVED") > phases.index("RECOVERING")
+    resolved = [a for a in alerts if a["status"] == "RESOLVED"]
+    assert len(resolved) == 1 and resolved[0]["scope"] == "payments"
+    assert all(" 201 " in s for s in resolved[0]["sample_lines"])      # recovery evidence
+    inc = incidents[0]
+    assert inc["status"] == "RESOLVED" and inc["scope"] == "payments"
+    assert inc["details"]["phase"] == "RESOLVED" and inc["alert_count"] == 2
+    assert inc["details"]["evidence"] and all(FAILED_CHECKOUT.search(s) for s in inc["details"]["evidence"])
+
+
+def test_global_anomaly_is_not_merged_into_payment_incident(tmp_path):
+    async def run():
+        p = _pipeline(tmp_path)
+        other = lambda t: [_line(t + j / 20, "INFO", "search", f"GET /api/v1/search 200 {j}ms") for j in range(19)]
+        spike = lambda t: [_line(t + j / 20, "ERROR" if j % 2 else "INFO", "search", f"GET /api/v1/search 500 {j}ms")
+                           for j in range(19)]
+        await _drive(p, None, T0, 90, lambda t: other(t) + [_checkout(t, 201)])
+        await _drive(p, None, T0 + 90, 60, lambda t: other(t) + [_checkout(t, 503)])
+        await _drive(p, None, T0 + 150, 30, lambda t: spike(t) + [_checkout(t, 503)])
+        return await p.store.list_alerts(), await p.store.list_incidents()
+
+    alerts, incidents = asyncio.run(run())
+    pay = [a for a in alerts if a["scope"] == "payments"]
+    glob = [a for a in alerts if a["scope"] == "global"]
+    assert pay and glob
+    assert {a["incident_id"] for a in pay}.isdisjoint({a["incident_id"] for a in glob})
+    assert sorted(i["scope"] for i in incidents) == ["global", "payments"]

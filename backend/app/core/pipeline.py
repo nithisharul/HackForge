@@ -7,7 +7,7 @@
                    -> AlertManager (dedup / cooldown / escalate / resolve)
                    -> IncidentGrouper -> root cause -> SQLite -> Dispatcher
                    -> PaymentMonitor (checkout 5xx rate; runs even when the
-                      global detector says NONE)
+                      global detector says NONE) -> own IncidentGrouper -> same store/dispatch
 
 Events are placed in the window by ARRIVAL time (wall clock), not by the
 timestamp written in the line. That keeps the system correct when producers
@@ -28,7 +28,7 @@ from app.core.baseline import EWMABaseline
 from app.core.detector import Detector, Evaluation
 from app.core.incident_grouper import IncidentGrouper
 from app.core.log_tailer import LogTailer
-from app.core.payment_monitor import PaymentMonitor
+from app.core.payment_monitor import PaymentEvaluation, PaymentMonitor
 from app.core.parsers import get_parser
 from app.core.severity import SeverityPolicy
 from app.core.template_miner import TemplateMiner
@@ -42,6 +42,9 @@ from app.publishers.websocket import ConnectionManager
 from app.sim.simulator import LogSimulator
 
 log = logging.getLogger(__name__)
+
+PAYMENT_TITLE = "Payment checkout failure spike"
+EVIDENCE_LABEL = "Supporting evidence: matching checkout log lines (not a proven root cause)"
 
 
 class Pipeline:
@@ -72,6 +75,9 @@ class Pipeline:
             cfg.window_seconds, cfg.payment_source, cfg.payment_route, cfg.payment_failure_threshold,
             cfg.payment_healthy_rate, cfg.payment_min_requests, cfg.payment_resolve_after_windows,
             cfg.payment_evidence_lines)
+        # separate grouper: IncidentGrouper tracks ONE current incident, and a
+        # global anomaly must never be merged into the payment incident (or vice versa)
+        self.payment_incidents = IncidentGrouper(cfg.incident_gap_seconds)
         self.latest_payment: dict | None = None
         self.simulator: LogSimulator | None = (
             LogSimulator(rate=cfg.simulator_rate, payment_rate=cfg.simulator_payment_rate)
@@ -175,6 +181,8 @@ class Pipeline:
         decision = self.alerts.process(ev.severity, now, ev.consecutive)
         if decision:
             await self._raise_alert(ev, decision)
+        if pay.action:
+            await self._payment_incident(pay, ev)
         self.last_tick_ms = (time.perf_counter() - t0) * 1000
         return ev
 
@@ -229,6 +237,50 @@ class Pipeline:
         await self.ws.broadcast("alerts", {"type": "incident", "data": incident.model_dump(mode="json")})
         self.dispatcher.submit(alert)
         log.info("ALERT %s %s %s", alert.status, alert.severity, alert.title)
+
+    async def _payment_incident(self, pay: PaymentEvaluation, ev: Evaluation) -> None:
+        """OPEN / RESOLVED -> one alert each; UPDATE -> refresh the stored incident only."""
+        s = pay.snapshot
+        now_dt = datetime.now(timezone.utc)
+        inc = self.payment_incidents.current
+        if pay.action == "UPDATE":
+            if inc is None or inc.status == "RESOLVED":
+                return
+            inc.last_seen = now_dt
+            inc.details = {**inc.details, **s}
+            await self.store.upsert_incident(inc)
+            await self.ws.broadcast("alerts", {"type": "incident", "data": inc.model_dump(mode="json")})
+            return
+
+        rate = f"{s['failures']}/{s['requests']} checkout requests ({s['failure_rate']:.1%})"
+        glob = f"overall error rate {ev.snapshot.error_rate:.1%}, global detector {ev.severity.name}"
+        if pay.action == "OPEN":
+            severity = Severity.HIGH if s["failure_rate"] >= 0.5 else Severity.MEDIUM
+            title, status = PAYMENT_TITLE, "OPEN"
+            description = (f"{rate} returned HTTP 5xx in the last {s['window_seconds']:.0f} s "
+                           f"(threshold {s['threshold']:.0%}, min {s['min_requests']} requests); {glob}.")
+        else:
+            severity = Severity.parse(inc.peak_severity) if inc else Severity.MEDIUM
+            title, status = f"RESOLVED: {PAYMENT_TITLE}", "RESOLVED"
+            description = (f"Checkout recovered: {s['resolve_after']} consecutive healthy windows with real "
+                           f"traffic; now {rate} failing (peak {s['peak_failure_rate']:.1%}).")
+        inc = self.payment_incidents.assign(pay.action, severity, now_dt, PAYMENT_TITLE)
+        inc.scope = "payments"
+        inc.details = {**s, "evidence_label": EVIDENCE_LABEL,
+                       "evidence": pay.evidence if pay.action == "OPEN" else inc.details.get("evidence", []),
+                       **({"recovery_evidence": pay.evidence} if pay.action == "RESOLVED" else {})}
+        alert = Alert(
+            id=f"ALR-{uuid.uuid4().hex[:10]}", incident_id=inc.id, ts=now_dt, status=status,
+            severity=severity.name, title=title, description=description,
+            error_rate=ev.snapshot.error_rate,               # still the GLOBAL error rate
+            final_score=round(s["failure_rate"] / s["threshold"], 3) if s["threshold"] else 0.0,
+            sample_lines=pay.evidence, scope="payments",
+        )
+        await self.store.save_alert(alert)
+        await self.store.upsert_incident(inc)
+        await self.ws.broadcast("alerts", {"type": "incident", "data": inc.model_dump(mode="json")})
+        self.dispatcher.submit(alert)
+        log.info("PAYMENT ALERT %s %s %s", alert.status, alert.severity, description)
 
     def _title(self, ev: Evaluation, sev: Severity) -> str:
         s = ev.snapshot

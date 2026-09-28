@@ -119,6 +119,7 @@ class Alert(BaseModel):
     root_cause: list[dict[str, Any]] = Field(default_factory=list)
     sample_lines: list[str] = Field(default_factory=list)
     delivered_to: list[str] = Field(default_factory=list)
+    scope: str = "global"            # "global" detector or a scoped one such as "payments"
 
 
 class Incident(BaseModel):
@@ -130,3 +131,5 @@ class Incident(BaseModel):
     alert_count: int
     status: Literal["OPEN", "RESOLVED"] = "OPEN"
     title: str
+    scope: str = "global"
+    details: dict[str, Any] = Field(default_factory=dict)   # scoped detectors: phase, stats, evidence
