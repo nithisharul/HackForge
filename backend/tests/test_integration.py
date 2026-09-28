@@ -3,6 +3,7 @@ round-trip, and the pipeline end to end."""
 import asyncio
 import json
 import os
+import sys
 import time
 
 import boto3
@@ -51,9 +52,12 @@ def test_tailer_handles_partial_lines_rotation_and_truncation(tmp_path):
             fh.write("\n")
         await asyncio.sleep(0.1)
         assert got == ["a", "b"]
-        os.replace(path, tmp_path / "app.log.1")   # rotation
-        path.write_text("c\n")
-        await asyncio.sleep(0.2)
+        if sys.platform != "win32":
+            # Windows won't let you rename a file another handle has open, so
+            # rename-style rotation can only be exercised on Linux/macOS.
+            os.replace(path, tmp_path / "app.log.1")   # rotation
+            path.write_text("c\n")
+            await asyncio.sleep(0.2)
         path.write_text("")                         # truncation
         await asyncio.sleep(0.1)
         with open(path, "a") as fh:
@@ -64,8 +68,35 @@ def test_tailer_handles_partial_lines_rotation_and_truncation(tmp_path):
         return got, tailer
 
     got, tailer = asyncio.run(run())
-    assert got == ["a", "b", "c", "d"]
-    assert tailer.rotations == 1
+    if sys.platform != "win32":
+        assert got == ["a", "b", "c", "d"]
+        assert tailer.rotations == 1
+    else:
+        assert got == ["a", "b", "d"]
+
+
+def test_tailer_strips_windows_crlf(tmp_path):
+    path = tmp_path / "app.log"
+    path.write_bytes(b"")
+
+    async def run():
+        tailer = LogTailer(path, from_end=True, poll_interval=0.02)
+        got: list[str] = []
+
+        async def consume():
+            async for batch in tailer.lines():
+                got.extend(batch)
+
+        task = asyncio.create_task(consume())
+        await asyncio.sleep(0.1)
+        with open(path, "ab") as fh:
+            fh.write(b"first\r\nsecond\r\n")
+        await asyncio.sleep(0.2)
+        tailer.stop()
+        await asyncio.wait_for(task, 1)
+        return got
+
+    assert asyncio.run(run()) == ["first", "second"]
 
 
 # ---------------------------------------------------------------- publishers

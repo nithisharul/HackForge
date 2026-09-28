@@ -2,6 +2,7 @@
 
 * Waits for the file to exist.
 * Yields complete lines only (a half-written line is buffered until its newline).
+* Handles both LF (Linux/macOS) and CRLF (Windows) line endings.
 * Survives rotation (file replaced -> inode changes -> reopen from start).
 * Survives truncation (file shrinks -> seek back to 0).
 """
@@ -56,7 +57,8 @@ class LogTailer:
                     buffer += chunk
                     *complete, buffer = buffer.split(b"\n")
                     if complete:
-                        lines = [c.decode("utf-8", errors="replace") for c in complete]
+                        # rstrip("\r") handles Windows CRLF line endings
+                        lines = [c.decode("utf-8", errors="replace").rstrip("\r") for c in complete]
                         self.lines_read += len(lines)
                         for i in range(0, len(lines), self.max_batch):
                             yield lines[i:i + self.max_batch]

@@ -1,0 +1,30 @@
+2026-05-29T03:26:40.488Z WARN [search] Connection pool at 81% capacity
+2026-05-29T03:26:40.660Z INFO [orders] Cache hit ratio 0.89 for key space sessions
+2026-05-29T03:26:40.685Z INFO [payments] POST /api/v1/checkout 201 299ms
+2026-05-29T03:26:40.826Z INFO [search] Cache hit ratio 0.98 for key space sessions
+2026-05-29T03:26:40.846Z INFO [auth] Published event order.created id=367148
+2026-05-29T03:26:40.873Z INFO [worker] User 43087 logged in from 10.0.202.30
+2026-05-29T03:26:40.884Z INFO [worker] GET /api/v1/orders/27451 200 46ms
+2026-05-29T03:26:40.904Z INFO [api] Published event order.created id=458419
+2026-05-29T03:26:41.008Z INFO [search] Cache hit ratio 0.87 for key space sessions
+2026-05-29T03:26:41.056Z INFO [orders] POST /api/v1/checkout 201 187ms
+2026-05-29T03:26:41.129Z WARN [api] Slow query took 1566ms on table orders
+2026-05-29T03:26:41.172Z INFO [auth] Scheduled job cleanup finished in 825ms
+2026-05-29T03:26:41.181Z WARN [search] Slow query took 787ms on table orders
+2026-05-29T03:26:41.205Z INFO [worker] Processed batch 5759 with 176 records
+2026-05-29T03:26:41.398Z INFO [api] Scheduled job cleanup finished in 315ms
+2026-05-29T03:26:41.401Z WARN [search] Retrying request to inventory-service attempt 1
+2026-05-29T03:26:41.425Z INFO [orders] POST /api/v1/checkout 201 142ms
+2026-05-29T03:26:41.478Z INFO [orders] User 24975 logged in from 10.0.62.28
+2026-05-29T03:26:41.528Z INFO [orders] Scheduled job cleanup finished in 626ms
+2026-05-29T03:26:41.603Z INFO [worker] Published event order.created id=956121
+2026-05-29T03:26:41.629Z WARN [auth] Slow query took 1413ms on table orders
+2026-05-29T03:26:41.635Z INFO [auth] GET /api/v1/orders/86879 200 98ms
+2026-05-29T03:26:41.737Z WARN [search] Retrying request to inventory-service attempt 3
+2026-05-29T03:26:41.752Z INFO [search] Cache hit ratio 0.85 for key space sessions
+2026-05-29T03:26:41.807Z INFO [api] Published event order.created id=334533
+2026-05-29T03:26:41.864Z INFO [api] Health check ok latency=11ms
+2026-05-29T03:26:41.906Z INFO [worker] Health check ok latency=10ms
+2026-05-29T03:26:41.967Z INFO [api] Health check ok latency=13ms
+2026-05-29T03:26:42.150Z INFO [payments] Published event order.created id=742812
+2026-05-29T03:26:42.178Z INFO [worker] Health check ok latency=20ms

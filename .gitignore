@@ -1,10 +1,52 @@
-.venv/
+# --- Secrets / credentials (never commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+credentials
+
+# --- Python ---
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+env/
 .pytest_cache/
-backend/alerts.db
-data/app.log*
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- Runtime files the app writes (regenerated automatically) ---
+*.log
+*.log.*
+!data/sample.log
 data/alerts_fallback.jsonl
 data/inject_request.json
-data/*.log
-backend/.env
+backend/alerts.db
+*.db
+
+# --- ML artifacts ---
+# backend/artifacts/ IS committed on purpose (trained weights, ~2.8 MB),
+# so nobody has to retrain after cloning.
+ml_research/data/
+ml_research/**/*.ckpt
+
+# --- Frontend ---
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+
+# --- LocalStack ---
+.localstack/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
