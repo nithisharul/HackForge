@@ -146,7 +146,8 @@ class PaymentMonitor:
         if action == "RESOLVED":
             snap["phase"] = "RESOLVED"
             self.phase, self.healthy_streak, self.peak_rate = "NORMAL", 0, 0.0
-        state = (self.phase, self.healthy_streak, self.unverified)
+        # a new peak also refreshes the stored incident (still no new alert)
+        state = (self.phase, self.healthy_streak, self.unverified, round(self.peak_rate, 2))
         if action is None and self.phase != "NORMAL" and state != self._last_state:
             action = "UPDATE"
         self._last_state = state

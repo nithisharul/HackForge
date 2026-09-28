@@ -118,6 +118,8 @@ queue), deliveries are retried with backoff, and anything that still fails is wr
 | GET | `/benchmark`, `/models`; POST `/models/reload` | Model comparison, hot reload |
 | GET | `/demo/scenarios`; POST `/demo/inject-anomaly` | Demo injection |
 
+Payment-scoped detector: besides the global detector, checkout requests from `[payments]` are tracked separately (HTTP 5xx = failed). The `hidden_payment_failure` demo scenario (synthetic) is walked through in [docs/demo-script.md](docs/demo-script.md#hidden-payment-failure-payment-scoped-incident--4-min).
+
 Full contract with payload examples: `docs/api-contract.md`. Interactive docs at `/docs`.
 
 ## Tests

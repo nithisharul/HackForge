@@ -118,6 +118,20 @@
       <div class="card kpi"><div class="label">Log volume</div><div class="value" id="kVol">–</div><div class="hint">lines in window</div></div>
     </section>
 
+    <section class="card" id="payCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <h2 style="margin:0">Payment checkout <span class="tag">scoped detector · [payments] POST /api/v1/checkout · 5xx = failed</span></h2>
+        <button id="payInject" class="primary">Inject hidden payment failure</button>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="label">Checkout failure rate</div><div class="value" id="pRate">–</div><div class="hint" id="pRateHint">last 60 s window</div></div>
+        <div class="kpi"><div class="label">Checkout requests</div><div class="value" id="pReq">–</div><div class="hint" id="pReqHint">in window</div></div>
+        <div class="kpi"><div class="label">Payment incident</div><div class="value" id="pStatus">–</div><div class="hint" id="pStatusHint">&nbsp;</div></div>
+      </div>
+      <div id="payInc" style="margin-top:10px"><div class="empty">No payment incident yet.</div></div>
+      <div class="tag" style="margin-top:6px">Demo traffic is synthetic (built-in log simulator).</div>
+    </section>
+
     <section class="card">
       <h2>Rolling error rate vs. baseline</h2>
       <div class="legend">
@@ -308,7 +322,54 @@ function updateKpis(m) {
   $("kSev").innerHTML = m.severity === "NONE" ? "normal (1.0 = edge of normal)" : sevBadge(m.severity);
   $("kVol").textContent = m.volume.toLocaleString();
   $("baselinePill").textContent = m.baseline_ready ? "Baseline: ready" : "Baseline: warming up";
+  renderPaymentLive(m);
 }
+
+// ---------------- payment checkout (scoped detector) ----------------
+const PAY_COLOR = { OPEN: "var(--critical)", RECOVERING: "var(--warning)", RESOLVED: "var(--good)", NONE: "var(--muted)" };
+let payLive = null, payInc = null;
+function renderPaymentLive(m) {
+  const p = m.payment; if (!p) return;
+  payLive = p;
+  $("pRate").textContent = p.requests ? pct(p.failure_rate) : "–";
+  $("pRateHint").textContent = `${p.failures} failed · opens at ≥ ${pct(p.threshold, 0)} · overall error rate ${pct(m.error_rate)}`;
+  $("pReq").textContent = p.requests.toLocaleString();
+  $("pReqHint").textContent = p.enough_traffic ? "in 60 s window" : `below minimum ${p.min_requests} – no verdict`;
+  renderPaymentStatus();
+}
+function renderPaymentStatus() {
+  const open = payInc && payInc.status !== "RESOLVED";
+  // the live monitor state wins over the stored snapshot while an incident is open
+  const phase = !payInc ? "NONE" : !open ? "RESOLVED"
+    : (payLive && payLive.phase !== "NORMAL" ? payLive.phase : payInc.details?.phase || "OPEN");
+  const src = open && payLive && payLive.phase !== "NORMAL" ? payLive : payInc?.details || {};
+  $("pStatus").innerHTML = phase === "NONE" ? "none"
+    : `<span class="sev"><i style="background:${PAY_COLOR[phase]}"></i>${esc(phase)}</span>`;
+  $("pStatusHint").textContent = phase === "NONE" ? "no payment incident"
+    : phase === "RESOLVED" ? `resolved ${fmtTime(payInc.resolved_at)}`
+    : src.recovery_unverified ? "recovery unverified – not enough checkout traffic"
+    : phase === "RECOVERING" ? `healthy window ${src.healthy_windows}/${src.resolve_after}`
+    : "failures ongoing";
+}
+function renderPayIncident(inc) {
+  payInc = inc || null;
+  renderPaymentStatus();
+  if (!inc) return;
+  const d = inc.details || {};
+  const lines = (d.evidence || []).map(s => `<div class="mono">${esc(s)}</div>`).join("");
+  const rec = (d.recovery_evidence || []).slice(-3).map(s => `<div class="mono">${esc(s)}</div>`).join("");
+  $("payInc").innerHTML = `
+    <div class="sub"><b>${esc(inc.title)}</b> · <span class="mono">${esc(inc.id)}</span></div>
+    <div class="sub">First detected ${fmtTime(inc.started_at)} · peak failure rate ${pct(d.peak_failure_rate)}
+      ${inc.resolved_at ? ` · resolved ${fmtTime(inc.resolved_at)}` : ""}</div>
+    ${lines ? `<details open style="margin-top:6px"><summary class="sub">${esc(d.evidence_label || "Supporting evidence")}</summary>${lines}</details>` : ""}
+    ${rec ? `<details style="margin-top:4px"><summary class="sub">Recovery evidence (successful checkouts)</summary>${rec}</details>` : ""}`;
+}
+$("payInject").onclick = async () => {
+  const r = await fetch(`${API}/demo/inject-anomaly`, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "hidden_payment_failure", duration_seconds: +$("demoDur").value }) });
+  const j = await r.json(); toast(r.ok ? `Injected ${j.kind} for ${j.duration_seconds} s (synthetic)` : (j.detail || "failed"));
+};
 
 // ---------------- alerts feed ----------------
 const seen = new Set();
@@ -331,10 +392,12 @@ function renderAlert(a, isNew) {
     <div class="title">${esc(a.title)}</div>
     <div class="desc">${esc(a.description)}</div>
     <details><summary>Why? (detectors, features, root cause)</summary>
-      <div class="tag" style="margin-top:6px">Scores: ${esc(dets) || "–"} · ensemble ${a.final_score.toFixed(2)}</div>
+      <div class="tag" style="margin-top:6px">${a.scope === "payments"
+        ? `Payment-scoped detector: checkout failure rate ÷ threshold = ${a.final_score.toFixed(2)}`
+        : `Scores: ${esc(dets) || "–"} · ensemble ${a.final_score.toFixed(2)}`}</div>
       ${feats ? `<div style="margin-top:6px"><b>Top features</b><ul>${feats}</ul></div>` : ""}
       ${roots ? `<div><b>Suspicious log templates</b><ul>${roots}</ul></div>` : ""}
-      ${samples ? `<div><b>Sample lines</b>${samples}</div>` : ""}
+      ${samples ? `<div><b>${a.scope === "payments" ? "Supporting evidence (not a proven root cause)" : "Sample lines"}</b>${samples}</div>` : ""}
       <div class="tag" style="margin:6px 0">Incident ${esc(a.incident_id)} · delivered: ${esc((a.delivered_to || []).join(", ") || "queued")}</div>
       <div class="btns"><button data-fb="TP">✓ Real issue</button><button data-fb="FP">✗ False alarm</button>
       <span class="tag" data-fbl>${a.feedback ? "marked " + a.feedback : ""}</span></div>
@@ -356,6 +419,7 @@ $("feedFilter").onchange = () => document.querySelectorAll(".alert").forEach(app
 async function loadIncidents() {
   try {
     const rows = await (await fetch(`${API}/incidents?limit=20`)).json();
+    renderPayIncident(rows.find(i => i.scope === "payments"));
     $("incEmpty").style.display = rows.length ? "none" : "";
     $("incTable").querySelector("tbody").innerHTML = rows.map(i => {
       const end = i.resolved_at ? new Date(i.resolved_at) : new Date(i.last_seen);
@@ -392,7 +456,7 @@ async function loadHealth() {
 async function loadDemo() {
   try {
     const sc = await (await fetch(`${API}/demo/scenarios`)).json();
-    $("demoBtns").innerHTML = Object.entries(sc).map(([k, d]) => `<button title="${esc(d)}" data-k="${k}">${k.replace("_", " ")}</button>`).join("");
+    $("demoBtns").innerHTML = Object.entries(sc).map(([k, d]) => `<button title="${esc(d)}" data-k="${esc(k)}">${esc(k.replace(/_/g, " "))}</button>`).join("");
     $("demoBtns").querySelectorAll("button").forEach(b => b.onclick = async () => {
       const r = await fetch(`${API}/demo/inject-anomaly`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: b.dataset.k, duration_seconds: +$("demoDur").value }) });
