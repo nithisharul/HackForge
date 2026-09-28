@@ -32,6 +32,11 @@ def format_message(alert: Alert) -> str:
         f"Incident:    {alert.incident_id}",
         f"Time (UTC):  {alert.ts.isoformat()}",
     ]
+    if alert.recommended_actions:
+        lines += ["", "WHAT TO DO:"]
+        for i, r in enumerate(alert.recommended_actions, 1):
+            lines.append(f"{i}. {r['title']}")
+            lines += [f"   - {step}" for step in r["steps"]]
     if alert.root_cause:
         lines += ["", "Suspicious log templates:"]
         lines += [f"  - [{r['count']}x] {r['template']}" for r in alert.root_cause[:3]]

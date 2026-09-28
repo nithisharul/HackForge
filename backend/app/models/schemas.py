@@ -117,6 +117,7 @@ class Alert(BaseModel):
     top_features: list[dict[str, Any]] = Field(default_factory=list)
     root_cause: list[dict[str, Any]] = Field(default_factory=list)
     sample_lines: list[str] = Field(default_factory=list)
+    recommended_actions: list[dict[str, Any]] = Field(default_factory=list)
     delivered_to: list[str] = Field(default_factory=list)
 
 

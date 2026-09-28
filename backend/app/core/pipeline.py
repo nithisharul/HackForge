@@ -31,6 +31,7 @@ from app.core.severity import SeverityPolicy
 from app.core.template_miner import TemplateMiner
 from app.core.window import SlidingWindow
 from app.db.store import AlertStore
+from app.explain.recommendations import recommend
 from app.explain.root_cause import rank_templates
 from app.ml.registry import ModelBundle, load_bundle
 from app.models.schemas import Alert, Metrics, Severity
@@ -207,6 +208,13 @@ class Pipeline:
             top_features=ev.top_features,
             root_cause=root if d.action != "RESOLVED" else [],
             sample_lines=self.window.recent_error_lines(5) if d.action != "RESOLVED" else [],
+        )
+        alert.recommended_actions = recommend(
+            severity=severity.name, status=status, action=d.action,
+            error_rate=snap.error_rate, baseline_mean=ev.baseline_mean,
+            top_features=ev.top_features, root_cause=alert.root_cause,
+            consecutive=d.consecutive, incident_alerts=incident.alert_count,
+            minutes_open=(now_dt - incident.started_at).total_seconds() / 60,
         )
         await self.store.save_alert(alert)
         await self.store.upsert_incident(incident)
