@@ -6,6 +6,8 @@
                    -> metrics broadcast
                    -> AlertManager (dedup / cooldown / escalate / resolve)
                    -> IncidentGrouper -> root cause -> SQLite -> Dispatcher
+                   -> PaymentMonitor (checkout 5xx rate; runs even when the
+                      global detector says NONE)
 
 Events are placed in the window by ARRIVAL time (wall clock), not by the
 timestamp written in the line. That keeps the system correct when producers
@@ -26,6 +28,7 @@ from app.core.baseline import EWMABaseline
 from app.core.detector import Detector, Evaluation
 from app.core.incident_grouper import IncidentGrouper
 from app.core.log_tailer import LogTailer
+from app.core.payment_monitor import PaymentMonitor
 from app.core.parsers import get_parser
 from app.core.severity import SeverityPolicy
 from app.core.template_miner import TemplateMiner
@@ -65,6 +68,11 @@ class Pipeline:
         self.detector.set_bundle(self.bundle)
         self.alerts = AlertManager(cfg.alert_cooldown_seconds, cfg.resolve_after_normal_windows)
         self.incidents = IncidentGrouper(cfg.incident_gap_seconds)
+        self.payments = PaymentMonitor(
+            cfg.window_seconds, cfg.payment_source, cfg.payment_route, cfg.payment_failure_threshold,
+            cfg.payment_healthy_rate, cfg.payment_min_requests, cfg.payment_resolve_after_windows,
+            cfg.payment_evidence_lines)
+        self.latest_payment: dict | None = None
         self.simulator: LogSimulator | None = (
             LogSimulator(rate=cfg.simulator_rate, payment_rate=cfg.simulator_payment_rate)
             if cfg.simulator_enabled else None)
@@ -107,13 +115,18 @@ class Pipeline:
         async for batch in self.tailer.lines():
             now = time.time()
             for line in batch:
-                ev = self.parser.parse(line)
-                if ev is None:
-                    self.parse_failures += 1
-                    continue
-                tid, _tpl, is_new = self.miner.add(ev.message)
-                self.window.add(now, ev.is_error, ev.is_warn, tid, is_new, ev.raw)
-                self.lines_processed += 1
+                self.ingest(line, now)
+
+    def ingest(self, line: str, now: float) -> None:
+        """One raw line -> global window + payment monitor (arrival time `now`)."""
+        ev = self.parser.parse(line)
+        if ev is None:
+            self.parse_failures += 1
+            return
+        tid, _tpl, is_new = self.miner.add(ev.message)
+        self.window.add(now, ev.is_error, ev.is_warn, tid, is_new, ev.raw)
+        self.payments.observe(now, ev)
+        self.lines_processed += 1
 
     async def _simulate(self) -> None:
         """Built-in log generator for the one-command demo."""
@@ -145,6 +158,8 @@ class Pipeline:
         ev = self.detector.evaluate(snap)
         self.latest = ev
         self.tick_count += 1
+        pay = self.payments.evaluate(now)      # every tick, whatever the global verdict
+        self.latest_payment = pay.snapshot
 
         metrics = Metrics(
             ts=snap.ts, volume=snap.volume, error_rate=snap.error_rate, warn_rate=snap.warn_rate,
@@ -152,7 +167,7 @@ class Pipeline:
             baseline_ready=ev.baseline_ready,
             zscore=round(ev.zscore, 3) if ev.zscore is not None else None,
             final_score=ev.final_score, severity=ev.severity.name,
-            low_confidence=snap.low_confidence, detectors=ev.detectors,
+            low_confidence=snap.low_confidence, detectors=ev.detectors, payment=pay.snapshot,
         ).model_dump(mode="json")
         self.metrics_history.append(metrics)
         await self.ws.broadcast("metrics", {"type": "metrics", "data": metrics})
@@ -247,5 +262,6 @@ class Pipeline:
             "alert_manager": {"active": self.alerts.active, "suppressed": self.alerts.suppressed,
                               "peak": self.alerts.peak.name},
             "simulator": bool(self.simulator),
+            "payment": self.latest_payment,
             "websocket_clients": self.ws.count(),
         }

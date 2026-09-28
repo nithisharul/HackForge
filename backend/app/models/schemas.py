@@ -98,6 +98,7 @@ class Metrics(BaseModel):
     severity: str
     low_confidence: bool
     detectors: list[DetectorScore] = Field(default_factory=list)
+    payment: dict[str, Any] | None = None    # payment-scoped window stats (separate from the fields above)
 
 
 class Alert(BaseModel):
