@@ -69,6 +69,11 @@
   .alert .title { font-weight: 600; margin: 6px 0 2px; overflow-wrap: anywhere; }
   .alert .desc { color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
   .alert details { margin-top: 6px; font-size: 12.5px; }
+  .alert details.todo { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+  .alert details.todo summary { color: var(--ink); }
+  .alert details.todo ol { padding-left: 18px; margin: 6px 0 2px; }
+  .alert details.todo ol > li { margin-bottom: 6px; }
+  .alert details.todo ul { margin: 2px 0; }
   .alert summary { cursor: pointer; color: var(--ink-2); }
   .alert ul { margin: 6px 0; padding-left: 18px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; overflow-wrap: anywhere; }
@@ -326,10 +331,14 @@ function renderAlert(a, isNew) {
     `<li><span class="mono">${esc(r.template)}</span><br><span class="tag">${r.count}× in window${r.error_count ? `, ${r.error_count} errors` : ""}${r.is_new ? " · NEW template" : ` · ${r.lift}× usual`}</span></li>`).join("");
   const dets = (a.detectors || []).filter(d => d.available).map(d => `${d.name} ${d.normalized.toFixed(2)}`).join(" · ");
   const samples = (a.sample_lines || []).map(s => `<div class="mono">${esc(s)}</div>`).join("");
+  const recs = (a.recommended_actions || []).map(r => `<li><b>${esc(r.title)}</b>
+      <ul>${r.steps.map(st => `<li>${esc(st)}</li>`).join("")}</ul>
+      <div class="tag">Why: ${esc(r.reason)}</div></li>`).join("");
   el.innerHTML = `
     <div class="row">${sevBadge(a.severity, a.status)}<span class="tag">${fmtTime(a.ts)} · ${esc(a.status)}</span></div>
     <div class="title">${esc(a.title)}</div>
     <div class="desc">${esc(a.description)}</div>
+    ${recs ? `<details class="todo" ${isNew ? "open" : ""}><summary><b>What to do</b> (${a.recommended_actions.length} recommended action${a.recommended_actions.length > 1 ? "s" : ""})</summary><ol>${recs}</ol></details>` : ""}
     <details><summary>Why? (detectors, features, root cause)</summary>
       <div class="tag" style="margin-top:6px">Scores: ${esc(dets) || "–"} · ensemble ${a.final_score.toFixed(2)}</div>
       ${feats ? `<div style="margin-top:6px"><b>Top features</b><ul>${feats}</ul></div>` : ""}
