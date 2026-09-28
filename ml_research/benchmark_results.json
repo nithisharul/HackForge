@@ -1,0 +1,135 @@
+{
+  "windows_scored": 1375,
+  "positives": 318,
+  "results": {
+    "zscore": {
+      "precision": 1.0,
+      "recall": 0.676,
+      "f1": 0.807,
+      "roc_auc": 0.806,
+      "false_positive_windows_per_hour": 0.0,
+      "false_alarm_episodes_per_hour": 0.0,
+      "anomalies_detected": "5/7",
+      "mean_time_to_detect_s": 25.0,
+      "detected_by_kind": {
+        "error_spike": [
+          10.0,
+          5.0
+        ],
+        "slow_ramp": [
+          80.0
+        ],
+        "volume_surge": [
+          null
+        ],
+        "volume_drop": [
+          null
+        ],
+        "new_errors": [
+          25.0
+        ],
+        "fatal_burst": [
+          5.0
+        ]
+      }
+    },
+    "iforest": {
+      "precision": 0.99,
+      "recall": 0.619,
+      "f1": 0.762,
+      "roc_auc": 0.982,
+      "false_positive_windows_per_hour": 1.36,
+      "false_alarm_episodes_per_hour": 1.36,
+      "anomalies_detected": "7/7",
+      "mean_time_to_detect_s": 33.6,
+      "detected_by_kind": {
+        "error_spike": [
+          5.0,
+          5.0
+        ],
+        "slow_ramp": [
+          60.0
+        ],
+        "volume_surge": [
+          80.0
+        ],
+        "volume_drop": [
+          35.0
+        ],
+        "new_errors": [
+          15.0
+        ],
+        "fatal_burst": [
+          35.0
+        ]
+      }
+    },
+    "lstm_ae": {
+      "precision": 0.858,
+      "recall": 0.969,
+      "f1": 0.91,
+      "roc_auc": 0.982,
+      "false_positive_windows_per_hour": 34.74,
+      "false_alarm_episodes_per_hour": 6.81,
+      "anomalies_detected": "7/7",
+      "mean_time_to_detect_s": 15.0,
+      "detected_by_kind": {
+        "error_spike": [
+          5.0,
+          5.0
+        ],
+        "slow_ramp": [
+          65.0
+        ],
+        "volume_surge": [
+          5.0
+        ],
+        "volume_drop": [
+          15.0
+        ],
+        "new_errors": [
+          5.0
+        ],
+        "fatal_burst": [
+          5.0
+        ]
+      }
+    },
+    "ensemble": {
+      "precision": 0.919,
+      "recall": 0.962,
+      "f1": 0.94,
+      "roc_auc": 0.986,
+      "false_positive_windows_per_hour": 18.39,
+      "false_alarm_episodes_per_hour": 0.0,
+      "anomalies_detected": "7/7",
+      "mean_time_to_detect_s": 17.2,
+      "detected_by_kind": {
+        "error_spike": [
+          5.0,
+          5.0
+        ],
+        "slow_ramp": [
+          65.0
+        ],
+        "volume_surge": [
+          10.0
+        ],
+        "volume_drop": [
+          25.0
+        ],
+        "new_errors": [
+          5.0
+        ],
+        "fatal_burst": [
+          5.0
+        ]
+      }
+    }
+  },
+  "data": "SIMULATED data from app/sim/simulator.py",
+  "models_loaded": [
+    "iforest",
+    "lstm_ae"
+  ]
+}

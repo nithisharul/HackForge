@@ -1,0 +1,50 @@
+{
+  "trained_at": "2026-09-28T08:17:13.857455+00:00",
+  "data_files": [
+    "../data/train_normal.log"
+  ],
+  "log_format": "generic",
+  "features": [
+    "volume",
+    "error_count",
+    "error_rate",
+    "warn_rate",
+    "unique_templates",
+    "new_templates"
+  ],
+  "window_seconds": 60.0,
+  "tick_seconds": 5.0,
+  "sequence_length": 10,
+  "feature_means_raw": [
+    1199.7727,
+    36.1409,
+    0.0301,
+    0.0706,
+    15.0,
+    0.0005
+  ],
+  "windows_total": 4308,
+  "windows_train": 3446,
+  "windows_val": 862,
+  "models": {
+    "iforest": {
+      "train_seconds": 0.25,
+      "calibration": {
+        "median": 0.46204697368510805,
+        "p99": 0.6339563526970058,
+        "p999": 0.6531191207738147,
+        "n": 862
+      }
+    },
+    "lstm_ae": {
+      "train_seconds": 5.66,
+      "final_train_loss": 0.06901,
+      "calibration": {
+        "median": 0.05451962724328041,
+        "p99": 0.2284609323740006,
+        "p999": 0.3093757076263446,
+        "n": 853
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# docker compose up --build
+#   -> dashboard on http://localhost:8000
+#   -> LocalStack (fake AWS: CloudWatch Logs + SNS) on http://localhost:4566
+services:
+  localstack:
+    image: localstack/localstack:3
+    ports: ["4566:4566"]
+    environment:
+      - SERVICES=logs,sns,sqs
+    volumes:
+      - ./infra/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    ports: ["8000:8000"]
+    depends_on: [localstack]
+    environment:
+      - LOG_FILE=/srv/data/app.log
+      - DB_PATH=/srv/data/alerts.db
+      - FALLBACK_ALERT_FILE=/srv/data/alerts_fallback.jsonl
+      - SIMULATOR_ENABLED=true
+      - AWS_ENABLED=true
+      - AWS_REGION=us-east-1
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:log-anomaly-alerts
+    volumes:
+      - ./data:/srv/data
