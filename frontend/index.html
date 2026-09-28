@@ -12,8 +12,8 @@
     --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee;
     --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
     --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
-    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
-    --band: rgba(42,120,214,0.12);
+    --s1: #1e40af; --s2: #991b1b; --s3: #166534; --s4: #6b21a8;
+    --band: rgba(30,64,175,0.12);
     --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --info: #2a78d6;
     --good-text: #006300;
   }
@@ -23,8 +23,8 @@
       --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
       --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
       --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
-      --band: rgba(57,135,229,0.18); --info: #3987e5; --good-text: #0ca30c;
+      --s1: #2563eb; --s2: #dc2626; --s3: #16a34a; --s4: #9333ea;
+      --band: rgba(37,99,235,0.18); --info: #3987e5; --good-text: #0ca30c;
     }
   }
   :root[data-theme="dark"] {
@@ -32,16 +32,16 @@
     --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
     --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
-    --band: rgba(57,135,229,0.18); --info: #3987e5; --good-text: #0ca30c;
+    --s1: #2563eb; --s2: #dc2626; --s3: #16a34a; --s4: #9333ea;
+    --band: rgba(37,99,235,0.18); --info: #3987e5; --good-text: #0ca30c;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--page); color: var(--ink);
-         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
            padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
   h1 { font-size: 17px; margin: 0; font-weight: 650; }
-  h2 { font-size: 14px; margin: 0 0 10px; font-weight: 600; }
+  h2 { font-size: 15px; margin: 0 0 10px; font-weight: 600; }
   .sub { color: var(--ink-2); font-size: 12.5px; }
   .pills { display: flex; flex-wrap: wrap; gap: 8px; }
   .pill { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 999px;
@@ -57,10 +57,17 @@
   .kpi .value { font-size: 24px; font-weight: 600; margin-top: 2px; }
   .kpi .hint { color: var(--muted); font-size: 12px; }
   .chart-box { position: relative; height: 230px; }
+  .tip { position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s; z-index: 2; white-space: nowrap;
+         background: var(--surface-2); color: var(--ink); border: 1px solid var(--axis); border-radius: 8px;
+         padding: 8px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+  .tip .t { font-weight: 600; margin-bottom: 4px; }
+  .tip .r { display: flex; align-items: center; gap: 7px; }
+  .tip .r i { width: 10px; height: 10px; border-radius: 2px; }
+  .tip .r b { margin-left: auto; padding-left: 14px; }
   .col { display: grid; gap: 16px; align-content: start; min-width: 0; }
   .sev { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 12px;
          padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); }
-  .sev i { font-style: normal; width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  .sev i { font-style: normal; }
   .feed { display: grid; gap: 10px; max-height: 760px; overflow-y: auto; padding-right: 2px; }
   .alert { border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 10px 12px; background: var(--surface); }
   .alert.new { animation: flash 1.2s ease-out; }
@@ -72,7 +79,7 @@
   .alert summary { cursor: pointer; color: var(--ink-2); }
   .alert ul { margin: 6px 0; padding-left: 18px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; overflow-wrap: anywhere; }
-  .tag { color: var(--muted); font-size: 11.5px; }
+  .tag { color: var(--muted); font-size: 12px; font-weight: 400; }
   button { font: inherit; font-size: 12.5px; cursor: pointer; border-radius: 7px; padding: 6px 10px;
            border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); }
   button:hover { border-color: var(--axis); }
@@ -200,7 +207,7 @@ function sevBadge(sev, status) {
   const key = status === "RESOLVED" ? "RESOLVED" : sev;
   const [color, icon] = SEV_STYLE[key] || SEV_STYLE.NONE;
   const label = status === "RESOLVED" ? `RESOLVED (${sev})` : sev;
-  return `<span class="sev"><i style="background:${color}"></i>${icon} ${esc(label)}</span>`;
+  return `<span class="sev"><i style="color:${color}">${icon}</i>${esc(label)}</span>`;
 }
 
 // ---------------- theme ----------------
@@ -217,14 +224,25 @@ try { const t = localStorage.getItem("theme"); if (t) document.documentElement.d
 const MAX_POINTS = 240;  // 20 minutes at 5 s ticks
 const SCORE_CAP = 8;
 let errChart = null, scoreChart = null;
+// HTML tooltip instead of Chart.js's canvas one: DOM text renders crisp (ClearType), canvas text looks soft
+const htmlTip = (fmt) => ({ chart, tooltip: t }) => {
+  const box = chart.canvas.parentNode;
+  const el = box.querySelector(".tip") || box.appendChild(Object.assign(document.createElement("div"), { className: "tip" }));
+  if (!t.opacity) { el.style.opacity = 0; return; }
+  el.innerHTML = `<div class="t">${esc(t.title[0])}</div>` + t.dataPoints.map((p, i) => {
+    const v = p.dataset.raw ? p.dataset.raw[p.dataIndex] : p.parsed.y;
+    return `<div class="r"><i style="background:${t.labelColors[i].borderColor}"></i>${esc(p.dataset.label)}<b>${v == null ? "–" : fmt(v)}</b></div>`;
+  }).join("");
+  el.style.left = (t.caretX > box.clientWidth / 2 ? t.caretX - el.offsetWidth - 14 : t.caretX + 14) + "px";
+  el.style.top = Math.max(0, Math.min(t.caretY - el.offsetHeight / 2, box.clientHeight - el.offsetHeight)) + "px";
+  el.style.opacity = 1;
+};
 function baseOptions(yTitle, yFmt) {
   return {
     responsive: true, maintainAspectRatio: false, animation: false, spanGaps: true,
     interaction: { mode: "index", intersect: false },
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => {
-      if (c.dataset.label.startsWith("_")) return null;
-      const v = c.dataset.raw ? c.dataset.raw[c.dataIndex] : c.parsed.y;
-      return `${c.dataset.label}: ${v == null ? "–" : yFmt(v)}`; } } } },
+    plugins: { legend: { display: false }, tooltip: { enabled: false, external: htmlTip(yFmt),
+      filter: (c) => !c.dataset.label.startsWith("_") } },
     scales: {
       x: { ticks: { maxTicksLimit: 8, color: css("--muted") }, grid: { display: false }, border: { color: css("--axis") } },
       y: { beginAtZero: true, title: { display: true, text: yTitle, color: css("--muted") },
@@ -239,12 +257,15 @@ function line(label, color, extra = {}) {
 function initCharts() {
   if (!window.Chart) { document.querySelectorAll(".chart-box").forEach(b => b.innerHTML =
     '<div class="empty">Chart library could not load (offline?). Metrics still update above.</div>'); return; }
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  const eOpts = baseOptions("error rate", v => pct(v));  // tooltip: 1 decimal
+  eOpts.scales.y.ticks.callback = v => (v * 100).toFixed(0) + "%";  // axis: whole percent
   errChart = new Chart($("errChart"), { type: "line", data: { labels: [], datasets: [
     line("_upper", "transparent", { fill: "+1", backgroundColor: css("--band"), borderWidth: 0 }),
     line("_lower", "transparent", { borderWidth: 0 }),
     line("Baseline mean", css("--muted"), { borderDash: [4, 4], borderWidth: 1.5 }),
     line("Error rate", css("--s1")),
-  ] }, options: baseOptions("error rate", v => (v * 100).toFixed(0) + "%") });
+  ] }, options: eOpts });
   const threshold = { id: "thresholds", afterDraw(chart) {
     const { ctx, chartArea: a, scales: { y } } = chart;
     [[1, "LOW"], [1.5, "MED"], [2.5, "HIGH"], [4, "CRIT"]].forEach(([v, name]) => {
@@ -256,7 +277,7 @@ function initCharts() {
       ctx.fillText(name, a.right - 2, py - 3); ctx.restore();
     });
   } };
-  const sOpts = baseOptions("score", v => v >= 100 ? v.toFixed(0) : v.toFixed(1));
+  const sOpts = baseOptions("score", v => v.toFixed(2));
   sOpts.scales.y.suggestedMax = 2; sOpts.scales.y.max = undefined;
   sOpts.scales.y.ticks.callback = v => v >= SCORE_CAP ? SCORE_CAP + "+" : v;
   scoreChart = new Chart($("scoreChart"), { type: "line", plugins: [threshold], data: { labels: [], datasets: [
@@ -392,7 +413,7 @@ async function loadHealth() {
 async function loadDemo() {
   try {
     const sc = await (await fetch(`${API}/demo/scenarios`)).json();
-    $("demoBtns").innerHTML = Object.entries(sc).map(([k, d]) => `<button title="${esc(d)}" data-k="${k}">${k.replace("_", " ")}</button>`).join("");
+    $("demoBtns").innerHTML = Object.entries(sc).map(([k, d]) => `<button title="${esc(d)}" data-k="${k}">${k.replaceAll("_", " ")}</button>`).join("");
     $("demoBtns").querySelectorAll("button").forEach(b => b.onclick = async () => {
       const r = await fetch(`${API}/demo/inject-anomaly`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: b.dataset.k, duration_seconds: +$("demoDur").value }) });
