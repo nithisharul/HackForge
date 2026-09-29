@@ -5,6 +5,11 @@
     python scripts/seed_demo_fix.py --operator "Nithish"
     python scripts/seed_demo_fix.py --list      # show what's stored
     python scripts/seed_demo_fix.py --remove    # delete the demo record(s)
+    python scripts/seed_demo_fix.py --clear-responses
+        # reset owners, logged actions and yes/no answers on every incident
+        # (keeps alerts, incidents, the seeded fix and fixes learned so far)
+    python scripts/seed_demo_fix.py --clear-responses --incident INC-20260929-060144-4ec1
+        # same, for one incident only
 
 The record is stored with incident id DEMO-SEED-1 so it's easy to identify and
 remove. Tell your audience it's seeded demo data.
@@ -51,6 +56,9 @@ def main() -> None:
     p.add_argument("--db", type=Path, default=settings.db_path)
     p.add_argument("--list", action="store_true")
     p.add_argument("--remove", action="store_true")
+    p.add_argument("--clear-responses", action="store_true",
+                   help="reset owner / actions / confirmation (keeps alerts and learned fixes)")
+    p.add_argument("--incident", help="with --clear-responses: only this incident id")
     a = p.parse_args()
 
     AlertStore(a.db).close()                      # make sure all tables exist
@@ -59,6 +67,17 @@ def main() -> None:
         n = con.execute("DELETE FROM resolutions WHERE incident_id LIKE 'DEMO-SEED-%'").rowcount
         con.commit()
         print(f"removed {n} demo record(s) from {a.db}")
+        return
+    if a.clear_responses:
+        where, args = ("WHERE incident_id = ?", (a.incident,)) if a.incident else ("", ())
+        n_act = con.execute(f"DELETE FROM incident_actions {where}", args).rowcount
+        n_meta = con.execute(
+            f"UPDATE incident_meta SET ack_by = NULL, ack_at = NULL, confirmed = NULL, "
+            f"confirmed_by = NULL, confirmed_at = NULL {where}", args).rowcount
+        con.commit()
+        target = a.incident or "all incidents"
+        print(f"cleared {n_act} logged action(s) and owner/answers on {n_meta} incident(s) ({target}).")
+        print("Refresh the dashboard (Ctrl+F5). No server restart needed.")
         return
     if a.list:
         for row in con.execute("SELECT incident_id, operator, steps, ttr_seconds, success, actions FROM resolutions"):
