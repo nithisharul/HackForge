@@ -21,6 +21,47 @@ log file ─► tailer ─► parser ─► template miner ─► sliding window
                   dispatcher ─► WebSocket dashboard │ CloudWatch Logs │ SNS │ local file
 ```
 
+## Recommended actions ("What to do")
+
+Every alert carries 1-4 plain-language recommended actions so an inexperienced
+operator knows where to start. They come from an editable playbook
+(`backend/app/explain/recommendations.py`) matched against the evidence in the alert:
+
+* **Severity / lifecycle**: CRITICAL means "take ownership, tell the team"; RESOLVED means "wrap up".
+* **Log content**: timeouts, database refused, out of memory, disk full, auth failures,
+  circuit breakers, malformed requests, each with concrete steps.
+* **Anomaly shape**: traffic dropped or surged, brand-new messages, unexplained error spike.
+* **Incident history**: escalating, or still unresolved after 5+ minutes, means escalate.
+
+Each action includes the reason ("'Connection refused to db-primary' appeared 27 times in
+the last minute and has never been seen before"). The actions appear on the dashboard,
+in the SNS message and in CloudWatch Logs. They are first-response guidance, not
+guaranteed fixes.
+
+## Incident response and the learning runbook
+
+The **Incident response** panel (top right of the dashboard) is where an operator works an incident:
+
+1. **I'm on it**: takes ownership (or **Take over** to reassign). The owner shows in the Incidents table.
+2. **Did this**: on any recommended step, or **Add** a custom action ("restarted payment-worker-3"). Every action is logged with who did it and when.
+3. When the system detects recovery, it asks **"Did your actions fix it?"**
+   * **Yes**: the ordered actions are saved as a **proven fix** for this kind of incident.
+   * **No**: they are recorded as not effective and rank lower next time.
+4. The next time a **similar incident** appears (the same unusual error types, the same kind of anomaly),
+   the alert shows **"✔ Proven fix: worked N× before, avg X steps, Y min, last by …"** above the playbook.
+
+Ranking: net successes (worked minus failed) first, then fewest steps, then fastest resolution. A fix that
+fails as often as it works stops being suggested. Logic: `backend/app/explain/learning.py`; storage:
+`incident_meta`, `incident_actions` and `resolutions` tables in `alerts.db`.
+
+## Degraded mode (a detector fails)
+
+Each ML model is isolated. If one crashes while scoring, it is marked **failed** and skipped, the ensemble
+averages the detectors that are still working (all share one calibrated scale, so thresholds stay the same),
+and the z-score keeps running regardless. `/health` reports `"status": "degraded"` with the error, and the
+dashboard's Models pill turns amber. Recovery: retrain if needed, then `POST /models/reload`, with no restart.
+Try it with the dashboard's **Break LSTM-AE** and **Reload models** buttons.
+
 ## Requirements coverage
 
 | Requirement | Where |
@@ -112,7 +153,12 @@ queue), deliveries are retried with backoff, and anything that still fails is wr
 | GET | `/alerts?limit&min_severity&status&incident_id` | Alert history |
 | GET | `/alerts/{id}` | One alert |
 | POST | `/alerts/{id}/feedback` `{"label":"TP"\|"FP"}` | Mark true/false positive |
-| GET | `/incidents` | Grouped alerts |
+| GET | `/incidents`, `/incidents/{id}` | Grouped alerts; one incident with owner, action log, latest alert |
+| POST | `/incidents/{id}/ack` `{"operator"}` | Take ownership / reassign |
+| POST | `/incidents/{id}/actions` `{"operator","action","source","rec_id"}` | Log an action |
+| POST | `/incidents/{id}/resolution` `{"operator","fixed"}` | "Did your actions fix it?" (learning) |
+| GET | `/learning/resolutions` | Everything the learning runbook has recorded |
+| POST | `/demo/break-model` `{"name"}` | Simulate a detector failure (degraded mode) |
 | GET | `/metrics`, `/metrics/history?minutes=15` | Error rate, baseline, scores |
 | GET | `/health` | Pipeline, models, publisher stats |
 | GET | `/benchmark`, `/models`; POST `/models/reload` | Model comparison, hot reload |
@@ -122,7 +168,7 @@ Full contract with payload examples: `docs/api-contract.md`. Interactive docs at
 
 ## Tests
 ```bash
-cd backend && pytest -q        # 20 tests: core logic, tailer, AWS (moto), dispatcher, ML, API + WebSocket
+cd backend && pytest -q        # 35 tests: core logic, tailer, AWS (moto), dispatcher, ML, API + WebSocket
 ```
 
 ## Project layout

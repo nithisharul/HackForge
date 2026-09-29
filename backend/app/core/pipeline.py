@@ -31,6 +31,7 @@ from app.core.severity import SeverityPolicy
 from app.core.template_miner import TemplateMiner
 from app.core.window import SlidingWindow
 from app.db.store import AlertStore
+from app.explain.learning import fingerprint
 from app.explain.recommendations import recommend
 from app.explain.root_cause import rank_templates
 from app.ml.registry import ModelBundle, load_bundle
@@ -152,7 +153,7 @@ class Pipeline:
             baseline_ready=ev.baseline_ready,
             zscore=round(ev.zscore, 3) if ev.zscore is not None else None,
             final_score=ev.final_score, severity=ev.severity.name,
-            low_confidence=snap.low_confidence, detectors=ev.detectors,
+            low_confidence=snap.low_confidence, detectors=ev.detectors, degraded=ev.degraded,
         ).model_dump(mode="json")
         self.metrics_history.append(metrics)
         await self.ws.broadcast("metrics", {"type": "metrics", "data": metrics})
@@ -209,6 +210,15 @@ class Pipeline:
             root_cause=root if d.action != "RESOLVED" else [],
             sample_lines=self.window.recent_error_lines(5) if d.action != "RESOLVED" else [],
         )
+        if d.action != "RESOLVED":
+            # learning runbook: remember what kind of incident this is, and show
+            # fixes that worked for similar incidents before
+            fp = fingerprint(alert.root_cause, ev.top_features, self._error_driven(ev))
+            await self.store.set_fingerprint(incident.id, fp)   # grows over the incident
+            try:
+                alert.proven_fixes = await self.store.find_proven_fixes(fp, exclude_incident=incident.id)
+            except Exception:
+                log.exception("Proven-fix lookup failed; continuing without it")
         alert.recommended_actions = recommend(
             severity=severity.name, status=status, action=d.action,
             error_rate=snap.error_rate, baseline_mean=ev.baseline_mean,
@@ -222,13 +232,15 @@ class Pipeline:
         self.dispatcher.submit(alert)
         log.info("ALERT %s %s %s", alert.status, alert.severity, alert.title)
 
+    def _error_driven(self, ev: Evaluation) -> bool:
+        top = ev.top_features[0]["feature"] if ev.top_features else None
+        return ((ev.zscore is not None and ev.zscore >= 3)
+                or ev.snapshot.error_rate >= self.cfg.critical_error_rate
+                or top in ("error_rate", "error_count"))
+
     def _title(self, ev: Evaluation, sev: Severity) -> str:
         s = ev.snapshot
-        top = ev.top_features[0]["feature"] if ev.top_features else None
-        err_driven = ((ev.zscore is not None and ev.zscore >= 3)
-                      or s.error_rate >= self.cfg.critical_error_rate
-                      or top in ("error_rate", "error_count"))
-        if err_driven:
+        if self._error_driven(ev):
             base = f" (baseline {ev.baseline_mean:.1%})" if ev.baseline_mean is not None else ""
             return f"{sev.name}: error rate {s.error_rate:.1%}{base}"
         if ev.top_features:
@@ -250,6 +262,8 @@ class Pipeline:
             "last_tick_ms": round(self.last_tick_ms, 2),
             "baseline": self.detector.baseline.to_dict(),
             "models_loaded": list(self.bundle.models),
+            "model_health": self.detector.model_health(),
+            "degraded": sorted(self.detector.model_failures),
             "model_metadata": {k: self.bundle.metadata.get(k) for k in ("trained_at", "windows_total")},
             "alert_manager": {"active": self.alerts.active, "suppressed": self.alerts.suppressed,
                               "peak": self.alerts.peak.name},

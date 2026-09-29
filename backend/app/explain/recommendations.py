@@ -1,7 +1,8 @@
 """Recommended actions: tells the on-call person WHAT TO DO, in plain language.
 
 Rule-based on purpose: every recommendation is predictable, reviewable and
-easy to edit. Recommendations come from four kinds of evidence, most urgent first:
+easy to edit, which matters more at 3am than cleverness. Recommendations come
+from four kinds of evidence, most urgent first:
 
   1. Severity / lifecycle  - CRITICAL needs an owner now; RESOLVED needs a wrap-up.
   2. Log content           - the error templates behind the spike (timeouts,
@@ -95,7 +96,7 @@ def recommend(*, severity: str, status: str, action: str, error_rate: float,
         return [_rec("wrap_up", "Wrap up the incident", [
             "Watch the dashboard for a few more minutes to confirm it stays normal.",
             "Write 2-3 lines in the incident channel: what happened, what fixed it, how long it lasted.",
-            "Mark the alerts as 'Real issue' or 'False alarm' on the dashboard so the system improves.",
+            "Answer 'Did your actions fix it?' in the Incident response panel so the system learns the fix.",
             "If a temporary fix was applied (restart, rollback), create a ticket for the permanent fix.",
         ], "The anomaly has cleared.", "lifecycle")]
 

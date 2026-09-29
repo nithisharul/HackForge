@@ -98,6 +98,7 @@ class Metrics(BaseModel):
     severity: str
     low_confidence: bool
     detectors: list[DetectorScore] = Field(default_factory=list)
+    degraded: list[str] = Field(default_factory=list)   # models that failed this tick
 
 
 class Alert(BaseModel):
@@ -118,6 +119,7 @@ class Alert(BaseModel):
     root_cause: list[dict[str, Any]] = Field(default_factory=list)
     sample_lines: list[str] = Field(default_factory=list)
     recommended_actions: list[dict[str, Any]] = Field(default_factory=list)
+    proven_fixes: list[dict[str, Any]] = Field(default_factory=list)   # learned from past incidents
     delivered_to: list[str] = Field(default_factory=list)
 
 

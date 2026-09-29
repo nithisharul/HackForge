@@ -86,3 +86,29 @@ On connect: `{"type": "hello", "data": [Metrics, ...]}` (last 10 min). Then ever
 | `GET /models`, `POST /models/reload` | loaded models, hot reload after retraining |
 | `GET /demo/scenarios` | scenario name → description |
 | `POST /demo/inject-anomaly` body `{"kind": "error_spike", "duration_seconds": 120}` | built-in simulator, or hands off to `generate_logs.py` |
+
+## Incident response & learning
+
+| Endpoint | Body | Notes |
+|---|---|---|
+| `GET /incidents/{id}` | | Incident + `ack_by`, `ack_at`, `fingerprint`, `actions[]`, `latest_alert`, `confirmed`, `resolution` |
+| `POST /incidents/{id}/ack` | `{"operator": "Nithish"}` | Take ownership; calling again reassigns |
+| `POST /incidents/{id}/actions` | `{"operator", "action", "source": "recommended\|proven\|custom", "rec_id"}` | Duplicate `rec_id` is ignored; 409 once confirmed |
+| `POST /incidents/{id}/resolution` | `{"operator", "fixed": true}` | 409 until the incident is RESOLVED. Returns `{fixed, learned, message}` |
+| `GET /learning/resolutions` | | All learning records |
+
+`/ws/alerts` also pushes `{"type": "incident_update", "data": <incident detail>}` after every ack / action / confirmation.
+
+Alerts carry `proven_fixes`:
+```json
+[{"actions": ["Restarted the DB connection pool", "Failed over to db-replica"],
+  "times_worked": 3, "times_failed": 0, "avg_steps": 2.0, "avg_minutes": 4.1,
+  "last_used": "2026-09-29T05:41:33Z", "last_operator": "Nithish", "similarity": 1.0}]
+```
+
+## Degraded mode
+
+`GET /health` → `"status": "ok" | "degraded"`, `pipeline.degraded: ["lstm_ae"]`,
+`pipeline.model_health.<model>: {"status": "ok" | "failed", "error", "failed_ticks", "since"}`.
+Metrics messages carry `degraded: [...]`. `POST /models/reload` clears failures.
+`POST /demo/break-model {"name": "lstm_ae"}` simulates a failure.

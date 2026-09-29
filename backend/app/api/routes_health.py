@@ -9,7 +9,7 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health(pipeline=Depends(get_pipeline), dispatcher=Depends(get_dispatcher)):
     return {
-        "status": "ok",
+        "status": "degraded" if pipeline.detector.model_failures else "ok",
         "pipeline": pipeline.status(),
         "publishers": dispatcher.status(),
         "aws_enabled": settings.aws_enabled,

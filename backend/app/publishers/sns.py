@@ -32,6 +32,11 @@ def format_message(alert: Alert) -> str:
         f"Incident:    {alert.incident_id}",
         f"Time (UTC):  {alert.ts.isoformat()}",
     ]
+    if alert.proven_fixes:
+        f = alert.proven_fixes[0]
+        lines += ["", f"PROVEN FIX (worked {f['times_worked']}x before, "
+                      f"avg {f['avg_steps']:g} steps, {f['avg_minutes']:g} min):"]
+        lines += [f"  {i}. {a}" for i, a in enumerate(f["actions"], 1)]
     if alert.recommended_actions:
         lines += ["", "WHAT TO DO:"]
         for i, r in enumerate(alert.recommended_actions, 1):

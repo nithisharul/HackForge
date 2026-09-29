@@ -40,3 +40,20 @@ async def inject(req: InjectRequest, pipeline=Depends(get_pipeline)):
         via = f"control file {settings.inject_control_file.name} (picked up by generate_logs.py)"
     return {"ok": True, "kind": req.kind, "description": SCENARIOS[req.kind],
             "duration_seconds": req.duration_seconds, "via": via}
+
+
+class BreakModel(BaseModel):
+    name: str = Field("lstm_ae", description="iforest | lstm_ae")
+
+
+@router.post("/break-model")
+async def break_model(req: BreakModel, pipeline=Depends(get_pipeline)):
+    """Simulate a detector crashing, to show degraded mode. The other detectors
+    keep working. Recover with POST /models/reload."""
+    if not settings.enable_demo_endpoints:
+        raise HTTPException(403, "demo endpoints disabled")
+    if req.name not in pipeline.bundle.models:
+        raise HTTPException(400, f"model not loaded; loaded: {list(pipeline.bundle.models)}")
+    pipeline.detector.break_model(req.name)
+    return {"ok": True, "broken": req.name,
+            "recover_with": "POST /models/reload"}

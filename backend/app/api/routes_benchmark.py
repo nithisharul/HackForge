@@ -26,5 +26,6 @@ async def models(pipeline=Depends(get_pipeline)):
 
 @router.post("/models/reload")
 async def reload_models(pipeline=Depends(get_pipeline)):
-    """Hot-swap to freshly trained artifacts without restarting."""
-    return {"loaded": pipeline.reload_models()}
+    """Hot-swap to freshly trained artifacts without restarting. Also clears any
+    failed-model state, so this is the recovery step for degraded mode."""
+    return {"loaded": pipeline.reload_models(), "model_health": pipeline.detector.model_health()}
